@@ -6,58 +6,62 @@ if [ "$#" -ne 1 ]; then
 fi
 
 TARGET_URL="$1"
+OUTPUT_DIR=$(mktemp -d "fingerprint-$(date +%Y%m%d%H%M%S)-XXX")
+echo "Results will be saved in $OUTPUT_DIR"
 
 echo "Running Web Application Fingerprinting on $TARGET_URL"
 
-# Get HTTP headers
-echo "Fetching HTTP headers..."
-curl -I -s "$TARGET_URL" > headers.txt
-echo "Saved HTTP headers to headers.txt"
+# Function to fetch HTTP headers
+fetch_http_headers() {
+    echo "Fetching HTTP headers..."
+    if curl -I -s "$TARGET_URL" > "$OUTPUT_DIR/headers.txt"; then
+        echo "Saved HTTP headers to $OUTPUT_DIR/headers.txt"
+    else
+        echo "Failed to fetch HTTP headers."
+    fi
+}
 
-# Run WhatWeb for fingerprinting
-echo "Running WhatWeb..."
-whatweb --color=never --log-xml=fingerprint.xml "$TARGET_URL"
-echo "Saved WhatWeb output to fingerprint.xml"
+# Function to run WhatWeb
+run_whatweb() {
+    echo "Running WhatWeb..."
+    if whatweb --color=never --log-xml="$OUTPUT_DIR/fingerprint.xml" "$TARGET_URL"; then
+        echo "Saved WhatWeb output to $OUTPUT_DIR/fingerprint.xml"
+    else
+        echo "WhatWeb failed to run."
+    fi
+}
 
-# Download the entire website for offline analysis
-echo "Downloading the website for offline analysis..."
-wget -q -N -r -l inf --timestamping --no-parent --convert-links --adjust-extension --page-requisites --no-check-certificate -P website-download "$TARGET_URL"
-echo "Website downloaded to website-download directory"
+# Function to download the website
+download_website() {
+    echo "Downloading the website for offline analysis..."
+    if wget -q -N -r -l inf --timestamping --no-parent --convert-links --adjust-extension --page-requisites --no-check-certificate -P "$OUTPUT_DIR/website-download" "$TARGET_URL"; then
+        echo "Website downloaded to $OUTPUT_DIR/website-download directory"
+    else
+        echo "Failed to download the website."
+    fi
+}
+
+fetch_http_headers
+run_whatweb
+download_website
 
 # Interactive input for aggressive mode
 echo "Do you want to run the aggressive mode? (yes/no)"
 read AGGRESSIVE_MODE
 if [[ "$AGGRESSIVE_MODE" =~ ^[Yy][Ee][Ss]$ ]]; then
-    # Extract domain name for nmap and nikto
     DOMAIN=$(echo "$TARGET_URL" | awk -F[/:] '{print $4}')
-    # Run nmap for port scanning and service detection
     echo "Running nmap..."
-    nmap -p- -sV -T4 -oN nmap_scan.txt "$DOMAIN"
-    echo "Saved nmap output to nmap_scan.txt"
-
-    # Run nikto for vulnerability scanning
-    echo "Running nikto..."
-    nikto -host "$TARGET_URL" -output nikto_scan.txt
-    echo "Saved nikto output to nikto_scan.txt"
-
-# Write a summary file
-echo "Writing a summary file..."
-{
-    echo "Web Application Fingerprinting Results"
-    echo "======================================"
-    echo "Target URL: $TARGET_URL"
-    echo ""
-    echo "HTTP Headers: headers.txt"
-    echo "WhatWeb Output: fingerprint.xml"
-    echo "Downloaded Website: website-download"
-    if [[ "$AGGRESSIVE_MODE" =~ ^[Yy][Ee][Ss]$ ]]; then
-        echo "Nmap Output: nmap_scan.txt"
-        echo "Nikto Output: nikto_scan.txt"
+    if nmap -p- -sV -T4 -oN "$OUTPUT_DIR/nmap_scan.txt" "$DOMAIN"; then
+        echo "Saved nmap output to $OUTPUT_DIR/nmap_scan.txt"
+    else
+        echo "Nmap scan failed."
     fi
-} > summary.txt
-
-echo "Summary file saved to summary.txt."
-
+    echo "Running nikto..."
+    if nikto -host "$TARGET_URL" -output "$OUTPUT_DIR/nikto_scan.txt"; then
+        echo "Saved nikto output to $OUTPUT_DIR/nikto_scan.txt"
+    else
+        echo "Nikto scan failed."
+    fi
 fi
 
 echo "Web Application Fingerprinting completed."

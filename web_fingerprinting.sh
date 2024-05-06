@@ -5,6 +5,14 @@ if [ "$#" -ne 1 ]; then
     exit 1
 fi
 
+# Check for required tools
+for tool in curl wget whatweb nmap nikto; do
+    if ! command -v $tool &> /dev/null; then
+        echo "Error: $tool is not installed. Please install it before running this script."
+        exit 1
+    fi
+done
+
 TARGET_URL="$1"
 OUTPUT_DIR=$(mktemp -d "fingerprint-$(date +%Y%m%d%H%M%S)-XXX")
 echo "Results will be saved in $OUTPUT_DIR"
@@ -46,7 +54,7 @@ run_whatweb
 download_website
 
 # Interactive input for aggressive mode
-echo "Do you want to run the aggressive mode? (yes/no)"
+echo "Do you want to run the aggressive mode? Aggressive mode includes port scanning and vulnerability scanning. (yes/no)"
 read AGGRESSIVE_MODE
 if [[ "$AGGRESSIVE_MODE" =~ ^[Yy][Ee][Ss]$ ]]; then
     DOMAIN=$(echo "$TARGET_URL" | awk -F[/:] '{print $4}')
